@@ -5,7 +5,9 @@ The player version is `MAJOR.MINOR.PATCH`. Two copies must always match:
 - `plugin.json` → `version` (what Millennium lists)
 - `PLUGIN_VERSION` in `backend/assets/frontend/steam-music-player.js` (the About line)
 
-The skin at the repo root (`skin.json`) is a different product and keeps its own number.
+The SteamSkin theme keeps its own version number.
+
+**1.3.6** is the baseline for this repo. Later changes start from here.
 
 ## When to bump
 

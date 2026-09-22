@@ -8,7 +8,7 @@ overlay (Shift+Tab) of every running game - not a separate app window.
 This is a **plugin** (has a Lua backend for filesystem access). The neutral
 dark theme is a separate repo, SteamSkin.
 
-Current player version: **1.3.6**. The number in `plugin.json` and the About
+Baseline version: **1.3.6**. The number in `plugin.json` and the About
 screen are the same number. When it moves, and the log of each build, is
 `CHANGELOG.md`.
 
