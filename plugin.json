@@ -1,0 +1,9 @@
+{
+	"name": "SteamMusicPlayer",
+	"common_name": "Steam Music Player",
+	"description": "Recreation of the original 2014-era Steam Music Player: local MP3 library, albums/artists/playlists, and a persistent player embedded in the Library and the real in-game overlay (Shift+Tab) of every running game.",
+	"version": "1.3.6",
+	"useBackend": true,
+	"backend": "backend",
+	"backendType": "lua"
+}

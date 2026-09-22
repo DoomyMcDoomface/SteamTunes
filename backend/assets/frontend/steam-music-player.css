@@ -1,0 +1,2005 @@
+/*
+ * Steam Music Player - visual recreation of the 2014-era look.
+ *
+ * Colors default to the original Steam Music blue/dark palette (from period
+ * screenshots) via CSS variables, so the whole thing can be re-themed to
+ * match a neutral palette later by overriding these variables instead of
+ * editing selectors throughout the file.
+ */
+
+:root {
+	/* Neutral black + red palette matching the SteamSkin theme.
+	 * Deliberately hardcoded rather than deferring to
+	 * --SystemAccentColor/Dark1 - those reflect the user's Steam UI theme
+	 * (often blue by default), which fought with this plugin's own red
+	 * theme instead of matching it. */
+	--smp-bg: #0e0e0f;
+	--smp-bg-elevated: #17181a;
+	--smp-bg-panel: #121214;
+	--smp-border: #2a2b2e;
+	--smp-accent: #b33232;
+	--smp-accent-dark: #7a1f1f;
+	--smp-accent-soft: rgba(179, 50, 50, 0.15);
+	--smp-accent-ring: rgba(179, 50, 50, 0.4);
+	--smp-text: #d9dadd;
+	--smp-text-dim: #8f98a0;
+	--smp-danger: #c0392b;
+}
+
+/* Native range inputs (seek bar, volume slider) render with the browser's
+ * default blue accent unless told otherwise. */
+.smp-seek,
+.smp-volume {
+	accent-color: var(--smp-accent);
+}
+
+/* Checkboxes specifically can't be fixed the same way: Steam's own base
+ * stylesheet sets `accent-color` on checkboxes with higher specificity
+ * than a plugin-injected stylesheet can win against (confirmed live -
+ * getComputedStyle kept reporting Steam's blue, not this file's red, even
+ * with the rule above also targeting the checkbox). Sidestepping that
+ * fight entirely by hiding the native checkbox rendering altogether
+ * (appearance: none) and drawing a fully custom one - a plain check/box
+ * this file completely owns the color of. */
+.smp-toggle-checkbox {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	margin: 0;
+	border: 1px solid var(--smp-border);
+	border-radius: 3px;
+	background: var(--smp-bg-panel);
+	position: relative;
+	cursor: pointer;
+	vertical-align: middle;
+	pointer-events: none;
+}
+
+.smp-toggle-checkbox:hover {
+	border-color: var(--smp-accent);
+}
+
+.smp-toggle-checkbox:checked {
+	background: var(--smp-accent);
+	border-color: var(--smp-accent);
+}
+
+.smp-toggle-checkbox:checked::after {
+	content: "";
+	position: absolute;
+	left: 4px;
+	top: 1px;
+	width: 4px;
+	height: 8px;
+	border: solid #fff;
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+}
+
+/* Real <button> elements (transport controls, tab buttons, etc.) can still
+ * paint native OS/Chromium chrome - a "ButtonFace" background and/or a
+ * focus ring that follows the *system* accent color (commonly blue on
+ * Windows) - on top of an explicit `background` unless appearance and the
+ * focus outline are both reset. Applies panel/overlay-wide since every
+ * clickable control here is a real <button>, not just the icon ones. */
+.smp-panel button,
+.smp-overlay-widget button {
+	-webkit-appearance: none;
+	appearance: none;
+	outline: none;
+}
+
+.smp-panel button:focus,
+.smp-panel button:focus-visible,
+.smp-overlay-widget button:focus,
+.smp-overlay-widget button:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 2px var(--smp-accent-ring);
+}
+
+.smp-hidden {
+	display: none !important;
+}
+
+/* ---- Launcher button (main context) ---- */
+
+/* --smp-chrome-bottom is measured at runtime from Steam's own bottom bar
+ * (see UI.measureSteamChrome). Sitting at the raw window edge would park the
+ * launcher directly on top of the Friends & Chat button. */
+.smp-launcher {
+	position: fixed;
+	right: max(12px, env(safe-area-inset-right, 0px));
+	bottom: calc(var(--smp-chrome-bottom, 0px) + max(12px, env(safe-area-inset-bottom, 0px)));
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	background: #000000;
+	color: var(--smp-accent);
+	font-size: 22px;
+	border: 1px solid var(--smp-border);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+	cursor: pointer;
+	/* Steam's in-game overlay chrome sits on very high stacking layers. */
+	z-index: 2147483000;
+}
+
+.smp-launcher:hover {
+	background: #1a1a1a;
+	border-color: var(--smp-accent-dark);
+}
+
+/* ---- Toast (transient notices, e.g. a track that failed to load) ----
+ * Independent of the panel's own open/closed state - playback (and
+ * therefore playback failures) happens whether or not the panel is open. */
+.smp-toast {
+	position: fixed;
+	left: 50%;
+	bottom: max(24px, env(safe-area-inset-bottom, 0px));
+	transform: translateX(-50%);
+	max-width: min(420px, calc(100vw - 48px));
+	background: #1a1a1a;
+	color: var(--smp-text);
+	border: 1px solid var(--smp-border);
+	border-radius: 6px;
+	padding: 10px 16px;
+	font-family: "Motiva Sans", Arial, sans-serif;
+	font-size: 13px;
+	line-height: 1.4;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+	z-index: 2147483000;
+	pointer-events: none;
+	transition: opacity 0.2s ease;
+	opacity: 1;
+}
+
+.smp-toast.smp-hidden {
+	display: none;
+	opacity: 0;
+}
+
+/* ---- Main panel ---- */
+
+.smp-panel {
+	--smp-panel-pad: 12px;
+	position: fixed;
+	right: max(12px, env(safe-area-inset-right, 0px));
+	bottom: calc(var(--smp-chrome-bottom, 0px) + 72px);
+	/* Fill available Steam window space instead of a fixed 640×520 box. */
+	width: min(640px, calc(100vw - 24px));
+	height: min(520px, calc(100vh - 96px));
+	max-width: calc(100vw - 24px);
+	max-height: calc(100vh - 96px - var(--smp-chrome-bottom, 0px));
+	background: var(--smp-bg);
+	border: 1px solid var(--smp-border);
+	border-radius: 4px;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+	display: flex;
+	flex-direction: column;
+	z-index: 2147483000;
+	color: var(--smp-text);
+	font-family: "Motiva Sans", Arial, sans-serif;
+	font-size: 13px;
+	overflow: hidden;
+	container-type: inline-size;
+	container-name: smp-panel;
+}
+
+.smp-panel-header {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	background: var(--smp-bg-elevated);
+	padding: 8px var(--smp-panel-pad);
+	border-bottom: 1px solid var(--smp-border);
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+.smp-tabs {
+	display: flex;
+	gap: 4px;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.smp-tab {
+	box-sizing: border-box;
+	height: 28px;
+	background: transparent;
+	border: none;
+	color: var(--smp-text-dim);
+	padding: 0 12px;
+	cursor: pointer;
+	border-radius: 3px;
+	font-family: inherit;
+	font-size: 12px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	white-space: nowrap;
+}
+
+.smp-tab.active,
+.smp-tab:hover {
+	background: var(--smp-accent-soft);
+	color: var(--smp-accent);
+}
+
+.smp-search {
+	background: var(--smp-bg-panel);
+	border: 1px solid var(--smp-border);
+	color: var(--smp-text);
+	padding: 0 8px;
+	border-radius: 3px;
+	width: 160px;
+	height: 28px;
+	max-width: 100%;
+	flex: 1 1 120px;
+	min-width: 0;
+	box-sizing: border-box;
+	font-family: inherit;
+	font-size: 12px;
+	line-height: 1;
+}
+
+.smp-close {
+	box-sizing: border-box;
+	width: 28px;
+	height: 28px;
+	background: transparent;
+	border: none;
+	color: var(--smp-text-dim);
+	font-size: 20px;
+	cursor: pointer;
+	line-height: 1;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.smp-close:hover {
+	color: #fff;
+}
+
+.smp-scan-banner {
+	padding: 8px 12px 10px;
+	border-bottom: 1px solid var(--smp-border);
+	background: var(--smp-bg-panel);
+	flex-shrink: 0;
+}
+
+.smp-scan-banner-text {
+	color: var(--smp-text-dim);
+	font-size: 12px;
+	margin-bottom: 6px;
+}
+
+.smp-scan-bar {
+	height: 6px;
+	border-radius: 3px;
+	background: var(--smp-bg-elevated);
+	overflow: hidden;
+}
+
+.smp-scan-bar-fill {
+	height: 100%;
+	width: 0;
+	background: var(--smp-accent);
+	transition: width 0.2s linear;
+}
+
+.smp-body {
+	flex: 1;
+	overflow: hidden;
+	padding: var(--smp-panel-pad);
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.smp-view {
+	display: none;
+}
+
+.smp-view.active {
+	display: block;
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.smp-view-library.active {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.smp-library-pane {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.smp-empty {
+	color: var(--smp-text-dim);
+	text-align: center;
+	padding: clamp(20px, 6vh, 40px) 20px;
+}
+
+.smp-scan-progress {
+	color: var(--smp-accent);
+	font-size: 12px;
+	margin-top: 8px;
+}
+
+/* ---- Library sub-tabs (Album / Artist / Genre) ---- */
+
+.smp-subtabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	flex-shrink: 0;
+	margin: 0 0 10px;
+	border-bottom: 1px solid var(--smp-border);
+	padding-bottom: 8px;
+	background: var(--smp-bg);
+	z-index: 2;
+}
+
+.smp-subtab {
+	box-sizing: border-box;
+	height: 28px;
+	background: transparent;
+	border: 1px solid transparent;
+	color: var(--smp-text-dim);
+	padding: 0 12px;
+	cursor: pointer;
+	border-radius: 3px;
+	font-family: inherit;
+	font-size: 12px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	white-space: nowrap;
+}
+
+.smp-subtab.active,
+.smp-subtab:hover {
+	background: var(--smp-bg-panel);
+	border-color: var(--smp-border);
+	color: var(--smp-accent);
+}
+
+/* ---- Album grid ---- */
+
+.smp-album-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr));
+	gap: 12px;
+}
+
+.smp-album-grid.smp-browse-virtual,
+.smp-genre-list.smp-browse-virtual,
+.smp-track-list.smp-browse-virtual {
+	display: block;
+	position: relative;
+	width: 100%;
+}
+
+.smp-browse-virtual .smp-album-card,
+.smp-browse-virtual .smp-genre-row,
+.smp-browse-virtual .smp-track-row {
+	position: absolute;
+	box-sizing: border-box;
+}
+
+.smp-album-card {
+	background: var(--smp-bg-panel);
+	border: 1px solid var(--smp-border);
+	border-radius: 3px;
+	padding: 8px;
+	cursor: pointer;
+	text-align: center;
+	min-width: 0;
+}
+
+.smp-album-card:hover {
+	border-color: var(--smp-accent);
+	background: var(--smp-bg-elevated);
+}
+
+.smp-album-art {
+	position: relative;
+	overflow: hidden;
+	width: 100%;
+	aspect-ratio: 1;
+	height: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: linear-gradient(135deg, var(--smp-bg-elevated), var(--smp-bg-panel));
+	color: var(--smp-accent-dark);
+	font-size: clamp(20px, 6cqi, 28px);
+	border-radius: 3px;
+	margin-bottom: 6px;
+	background-size: cover;
+	background-position: center;
+}
+
+.smp-album-art-img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	border-radius: inherit;
+	pointer-events: none;
+}
+
+.smp-album-art.has-art {
+	color: transparent;
+}
+
+.smp-set-cover {
+	position: absolute;
+	right: 4px;
+	bottom: 4px;
+	z-index: 2;
+	margin: 0;
+	padding: 2px 6px;
+	border: 1px solid var(--smp-border);
+	border-radius: 3px;
+	background: rgba(0, 0, 0, 0.72);
+	color: var(--smp-text);
+	font-size: 10px;
+	line-height: 1.4;
+	cursor: pointer;
+	opacity: 0;
+}
+
+.smp-album-art:not(.has-art) .smp-set-cover,
+.smp-album-art:hover .smp-set-cover,
+.smp-album-art:focus-within .smp-set-cover {
+	opacity: 1;
+}
+
+.smp-set-cover:hover {
+	border-color: var(--smp-accent);
+	color: var(--smp-accent);
+}
+
+.smp-album-title {
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.smp-album-artist {
+	color: var(--smp-text-dim);
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.smp-artist-link {
+	background: transparent;
+	border: 0;
+	padding: 0;
+	margin: 0;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+	text-align: inherit;
+}
+
+.smp-artist-link:hover,
+.smp-artist-link:focus-visible {
+	color: var(--smp-accent);
+	text-decoration: underline;
+}
+
+button.smp-album-artist.smp-artist-link {
+	display: block;
+	width: 100%;
+	max-width: 100%;
+	text-align: left;
+}
+
+.smp-track-sub .smp-artist-link {
+	display: inline;
+	vertical-align: baseline;
+	font-size: inherit;
+}
+
+.smp-nptab-artist.smp-artist-link {
+	cursor: pointer;
+}
+
+/* ---- Library drill-down (artist -> albums -> tracks) ---- */
+
+.smp-drill-bar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 10px;
+	min-width: 0;
+}
+
+.smp-back-btn {
+	background: var(--smp-bg-panel);
+	border: 1px solid var(--smp-border);
+	color: var(--smp-text);
+	flex-shrink: 0;
+}
+
+.smp-back-btn:hover {
+	border-color: var(--smp-accent);
+	color: var(--smp-accent);
+}
+
+.smp-drill-title {
+	font-weight: 600;
+	font-size: 14px;
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.smp-drill-bar-action {
+	margin-left: auto;
+	flex-shrink: 1;
+	min-width: 0;
+	max-width: 55%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.smp-drill-header {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	margin-bottom: 14px;
+	flex-wrap: wrap;
+}
+
+.smp-album-art-large {
+	width: clamp(72px, 22cqi, 96px);
+	height: clamp(72px, 22cqi, 96px);
+	flex-shrink: 0;
+	font-size: clamp(28px, 8cqi, 36px);
+	margin-bottom: 0;
+}
+
+.smp-drill-info {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.smp-drill-album-title {
+	font-weight: 700;
+	font-size: 16px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.smp-drill-album-artist {
+	color: var(--smp-text-dim);
+	font-size: 13px;
+	align-self: flex-start;
+	text-align: left;
+}
+
+.smp-drill-info .smp-btn {
+	align-self: flex-start;
+	margin-top: 4px;
+}
+
+.smp-drill-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.smp-drill-actions > .smp-btn,
+.smp-drill-actions > .smp-btn-small {
+	margin: 0;
+	align-self: center;
+}
+
+.smp-popup-hint {
+	position: fixed;
+	z-index: 2147483646;
+	max-width: 220px;
+	padding: 6px 8px;
+	background: #1a1b1e;
+	color: var(--smp-text);
+	border: 1px solid var(--smp-border);
+	border-radius: 3px;
+	font-size: 12px;
+	line-height: 1.35;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+	pointer-events: none;
+	white-space: normal;
+}
+
+.smp-drill-playall {
+	margin-bottom: 10px;
+}
+
+.smp-track-list {
+	display: flex;
+	flex-direction: column;
+}
+
+.smp-disc-header {
+	color: var(--smp-text-dim);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	padding: 12px 8px 4px;
+	margin-top: 2px;
+}
+
+.smp-disc-header:first-child {
+	margin-top: 0;
+	padding-top: 2px;
+}
+
+.smp-track-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 8px;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.smp-track-row:hover {
+	background: var(--smp-bg-elevated);
+}
+
+.smp-track-row.current {
+	background: var(--smp-accent-soft);
+}
+
+.smp-track-row.current .smp-track-name {
+	color: var(--smp-accent);
+}
+
+.smp-track-row.dragging {
+	opacity: 0.45;
+}
+
+.smp-track-row.drag-over {
+	border-top: 2px solid var(--smp-accent);
+}
+
+.smp-track-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+}
+
+.smp-btn-small.smp-btn-iconish {
+	width: 28px;
+	min-width: 28px;
+	height: 28px;
+	min-height: 28px;
+	padding: 0;
+}
+
+.smp-btn-iconish .smp-icon {
+	display: block;
+	pointer-events: none;
+}
+
+.smp-btn-iconish:hover {
+	color: var(--smp-accent);
+}
+
+.smp-btn-small:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.smp-track-num {
+	color: var(--smp-text-dim);
+	font-size: 12px;
+	width: 24px;
+	text-align: right;
+	flex-shrink: 0;
+}
+
+.smp-track-namecol {
+	min-width: 0;
+	flex: 1;
+}
+
+.smp-track-name {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.smp-track-sub {
+	color: var(--smp-text-dim);
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.smp-genre-list {
+	display: flex;
+	flex-direction: column;
+}
+
+.smp-genre-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 10px;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.smp-genre-row:hover {
+	background: var(--smp-bg-elevated);
+}
+
+.smp-genre-name {
+	min-width: 0;
+	flex: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.smp-genre-count {
+	color: var(--smp-text-dim);
+	font-size: 12px;
+	flex-shrink: 0;
+}
+
+/* ---- Playlists ---- */
+
+.smp-playlist-create {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.smp-playlist-name-input,
+.smp-text-input {
+	box-sizing: border-box;
+	height: 28px;
+	background: var(--smp-bg-panel);
+	border: 1px solid var(--smp-border);
+	color: var(--smp-text);
+	padding: 0 8px;
+	border-radius: 3px;
+	font-size: 12px;
+	line-height: 1;
+	flex: 1;
+}
+
+.smp-playlist-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px;
+	border-bottom: 1px solid var(--smp-border);
+}
+
+.smp-playlist-art {
+	width: 36px;
+	height: 36px;
+	flex: 0 0 36px;
+	aspect-ratio: auto;
+	margin-bottom: 0;
+	font-size: 14px;
+}
+
+.smp-playlist-name {
+	flex: 1;
+}
+
+/* ---- Settings ---- */
+
+.smp-settings-section {
+	margin-bottom: 20px;
+}
+
+.smp-settings-heading {
+	font-weight: 700;
+	color: var(--smp-accent);
+	margin-bottom: 8px;
+	text-transform: uppercase;
+	font-size: 12px;
+	letter-spacing: 0.05em;
+}
+
+.smp-collapse-heading {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0 0 8px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	font: inherit;
+	font-weight: 700;
+	font-size: 12px;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--smp-accent);
+}
+
+.smp-collapse-heading:hover {
+	color: var(--smp-accent);
+}
+
+.smp-collapse-arrow {
+	display: inline-flex;
+	align-items: center;
+	flex: 0 0 auto;
+	color: currentColor;
+	line-height: 0;
+}
+
+.smp-collapse-arrow svg {
+	display: block;
+	width: 9px;
+	height: 7px;
+}
+
+.smp-collapse-heading.is-collapsed .smp-collapse-arrow {
+	transform: rotate(-90deg);
+}
+
+.smp-about-section {
+	margin-top: 4px;
+	padding-top: 14px;
+	border-top: 1px solid var(--smp-border);
+}
+
+.smp-about-title {
+	font-weight: 600;
+	color: var(--smp-text);
+}
+
+.smp-about-version {
+	color: var(--smp-text-dim);
+	font-size: 12px;
+	margin-top: 2px;
+}
+
+.smp-folder-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 0;
+}
+
+.smp-folder-path {
+	flex: 1;
+	color: var(--smp-text-dim);
+	word-break: break-all;
+}
+
+.smp-folder-add {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.smp-toggle-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 0;
+	cursor: pointer;
+}
+
+.smp-toggle-row:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 2px var(--smp-accent-ring);
+}
+
+.smp-coming-soon {
+	opacity: 0.45;
+	pointer-events: none;
+}
+
+.smp-settings-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.smp-settings-label {
+	width: 220px;
+	color: var(--smp-accent);
+}
+
+.smp-color-theme-row {
+	align-items: flex-start;
+}
+
+.smp-color-swatches {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	flex: 1;
+}
+
+.smp-color-swatch {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-end;
+	width: 64px;
+	height: 52px;
+	padding: 4px 4px 6px;
+	border-radius: 6px;
+	border: 1px solid var(--smp-border);
+	background:
+		linear-gradient(180deg, var(--smp-swatch, var(--smp-accent)) 0 28px, var(--smp-bg-panel) 28px);
+	color: var(--smp-text);
+	cursor: pointer;
+}
+
+.smp-color-swatch-steam {
+	background:
+		linear-gradient(180deg, #66c0f4 0 16px, #1b2838 16px 28px, #171a21 28px);
+}
+
+.smp-color-swatch-custom {
+	background:
+		conic-gradient(from 180deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00) top / 100% 28px no-repeat,
+		var(--smp-bg-panel);
+}
+
+.smp-color-swatch.active {
+	border-color: var(--smp-accent);
+	box-shadow: 0 0 0 1px var(--smp-accent);
+}
+
+.smp-color-swatch-label {
+	font-size: 10px;
+	line-height: 1.1;
+	color: var(--smp-text);
+	text-align: center;
+}
+
+.smp-color-picker-row .smp-color-picker {
+	width: 48px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid var(--smp-border);
+	border-radius: 4px;
+	background: var(--smp-bg-panel);
+	cursor: pointer;
+}
+
+.smp-hint {
+	color: var(--smp-text-dim);
+	font-size: 11px;
+	margin-top: 4px;
+}
+
+.smp-settings-section > .smp-btn {
+	margin-top: 12px;
+}
+
+.smp-feature-block {
+	margin-top: 8px;
+	padding: 2px 0 10px;
+	border-bottom: 1px solid var(--smp-border);
+}
+
+.smp-feature-block:last-child {
+	border-bottom: none;
+}
+
+.smp-feature-block > .smp-setting-block {
+	padding: 0;
+	border-bottom: none;
+}
+
+.smp-feature-dependants {
+	margin: 4px 0 0 24px;
+	padding: 2px 0 2px 12px;
+	border-left: 2px solid var(--smp-accent-ring);
+}
+
+.smp-feature-dependants > .smp-setting-block {
+	padding: 8px 0;
+}
+
+/* ---- Mix settings ---- */
+
+/* Each mix control is a labelled row plus an explanation, grouped so the hint
+ * stays visually attached to the control it describes. */
+.smp-setting-block {
+	padding: 8px 0;
+	border-bottom: 1px solid var(--smp-border);
+}
+
+.smp-setting-block:last-child {
+	border-bottom: none;
+}
+
+.smp-setting-block .smp-settings-row {
+	margin-top: 0;
+}
+
+.smp-setting-block .smp-hint {
+	max-width: 60ch;
+}
+
+.smp-more-info {
+	display: inline-block;
+	margin: 2px 0 0;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--smp-accent);
+	font-size: 11px;
+	cursor: pointer;
+	text-align: left;
+}
+
+.smp-more-info:hover {
+	text-decoration: underline;
+}
+
+.smp-eq-preset-guide {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 8px;
+	max-width: 60ch;
+}
+
+.smp-eq-preset-guide-item {
+	color: var(--smp-text-dim);
+	font-size: 11px;
+	line-height: 1.4;
+}
+
+.smp-eq-preset-guide-item.is-current {
+	color: var(--smp-text);
+}
+
+.smp-eq-preset-guide-name {
+	font-weight: 600;
+	color: var(--smp-text);
+}
+
+.smp-select {
+	background: var(--smp-bg-panel);
+	border: 1px solid var(--smp-border);
+	color: var(--smp-text);
+	padding: 5px 6px;
+	border-radius: 3px;
+	flex: 1;
+	min-width: 0;
+}
+
+.smp-settings-slider {
+	flex: 1;
+	min-width: 0;
+	accent-color: var(--smp-accent);
+}
+
+/* Tabular figures and a reserved width so the value changing while dragging
+ * does not shift the slider next to it. */
+.smp-settings-readout {
+	width: 8ch;
+	flex: none;
+	text-align: right;
+	color: var(--smp-text-dim);
+	font-variant-numeric: tabular-nums;
+}
+
+.smp-eq-bank-scroll {
+	overflow-x: auto;
+	padding: 6px 2px 10px;
+	scrollbar-width: thin;
+}
+
+.smp-eq-fader-bank {
+	display: grid;
+	grid-template-columns: repeat(10, minmax(40px, 1fr));
+	gap: 6px;
+	min-width: 480px;
+	padding: 8px 6px;
+	background: rgba(0, 0, 0, 0.16);
+	border: 1px solid var(--smp-border);
+	border-radius: 4px;
+}
+
+.smp-eq-fader {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	min-width: 0;
+}
+
+.smp-eq-fader-readout {
+	height: 18px;
+	color: var(--smp-text-dim);
+	font-size: 10px;
+	font-variant-numeric: tabular-nums;
+}
+
+.smp-eq-fader-track {
+	position: relative;
+	width: 28px;
+	height: 132px;
+}
+
+.smp-eq-fader-input {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 120px;
+	margin: 0;
+	accent-color: var(--smp-accent);
+	transform: translate(-50%, -50%) rotate(-90deg);
+	cursor: ns-resize;
+}
+
+.smp-eq-fader-label {
+	margin-top: 2px;
+	color: var(--smp-text);
+	font-size: 10px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+/* The panel narrows on small screens, where a 220px label column plus a slider
+ * leaves the slider unusably short. */
+@media (max-width: 620px) {
+	.smp-setting-block .smp-settings-row {
+		flex-wrap: wrap;
+	}
+
+	.smp-setting-block .smp-settings-label {
+		width: 100%;
+	}
+}
+
+/* ---- Buttons ---- */
+
+.smp-btn,
+.smp-btn-small,
+.smp-back-btn {
+	box-sizing: border-box;
+	height: 28px;
+	min-height: 28px;
+	padding: 0 12px;
+	border-radius: 3px;
+	font-family: inherit;
+	font-size: 12px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.smp-btn {
+	background: var(--smp-accent-dark);
+	color: #fff;
+	border: 1px solid transparent;
+}
+
+.smp-btn:hover {
+	background: var(--smp-accent);
+}
+
+.smp-btn-small {
+	background: var(--smp-bg-panel);
+	border: 1px solid var(--smp-border);
+	color: var(--smp-text);
+}
+
+.smp-btn-small:hover {
+	border-color: var(--smp-accent);
+}
+
+.smp-btn-danger:hover {
+	border-color: var(--smp-danger);
+	color: var(--smp-danger);
+}
+
+/* Full-size (.smp-btn) danger buttons are impactful actions, not list-row
+ * cleanup like the small variant above, so they carry color at rest
+ * instead of only tinting on hover. */
+.smp-btn.smp-btn-danger {
+	background: var(--smp-danger);
+}
+
+.smp-btn.smp-btn-danger:hover {
+	background: #d84a3a;
+}
+
+.smp-btn.smp-btn-danger:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.smp-btn-icon {
+	box-sizing: border-box;
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	min-height: 28px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent !important;
+	background-color: transparent !important;
+	border: none;
+	box-shadow: none;
+	color: var(--smp-text);
+	font-size: 14px;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0;
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.smp-btn-icon:hover {
+	background: transparent !important;
+	color: var(--smp-accent);
+}
+
+.smp-btn-icon .smp-icon {
+	display: block;
+	pointer-events: none;
+}
+
+.smp-repeat-btn {
+	font-size: 14px;
+}
+
+.smp-repeat-btn.smp-repeat-off {
+	opacity: 0.45;
+}
+
+.smp-repeat-btn.active,
+.smp-repeat-btn.smp-repeat-all,
+.smp-repeat-btn.smp-repeat-one,
+.smp-shuffle-btn.active {
+	color: var(--smp-accent);
+	opacity: 1;
+}
+
+.smp-shuffle-btn:not(.active) {
+	opacity: 0.45;
+}
+
+/* ---- Now playing bar ---- */
+
+.smp-nowplaying {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px 10px;
+	background: var(--smp-bg-elevated);
+	border-top: 1px solid var(--smp-border);
+	padding: 8px var(--smp-panel-pad);
+	flex-shrink: 0;
+	min-width: 0;
+}
+
+.smp-nowplaying-empty {
+	color: var(--smp-text-dim);
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.smp-nowplaying-art {
+	width: 44px;
+	height: 44px;
+	flex: 0 0 44px;
+	aspect-ratio: auto;
+	margin-bottom: 0;
+	font-size: 18px;
+}
+
+.smp-nowplaying-info {
+	flex: 1 1 120px;
+	min-width: 0;
+	max-width: 180px;
+	overflow: hidden;
+}
+
+.smp-nowplaying-title,
+.smp-nowplaying-artist,
+.smp-overlay-title,
+.smp-overlay-artist {
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.smp-nowplaying-title {
+	font-weight: 600;
+}
+
+.smp-nowplaying-artist {
+	color: var(--smp-text-dim);
+	font-size: 11px;
+}
+
+.smp-marquee-inner {
+	display: inline-block;
+	white-space: nowrap;
+	will-change: transform;
+}
+
+.smp-marquee-css .smp-marquee-inner {
+	animation: smp-marquee-cycle var(--smp-marquee-duration, 18s) linear infinite;
+}
+
+@keyframes smp-marquee-cycle {
+	0%,
+	24% {
+		transform: translateX(0);
+	}
+	48%,
+	56% {
+		transform: translateX(var(--smp-marquee-dist, 0px));
+	}
+	68%,
+	100% {
+		transform: translateX(0);
+	}
+}
+
+.smp-nowplaying-controls {
+	display: flex;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.smp-seek {
+	flex: 1 1 100px;
+	min-width: 60px;
+}
+
+.smp-time {
+	color: var(--smp-text-dim);
+	font-size: 11px;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.smp-volume {
+	width: 64px;
+	max-width: 18%;
+	height: 14px;
+	padding: 0;
+	margin: 0;
+	background: transparent;
+	-webkit-appearance: none;
+	appearance: none;
+	flex-shrink: 0;
+}
+
+.smp-volume::-webkit-slider-runnable-track {
+	height: 3px;
+	background: var(--smp-border);
+	border-radius: 2px;
+}
+
+.smp-volume::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 10px;
+	height: 10px;
+	margin-top: -3.5px;
+	border-radius: 50%;
+	background: var(--smp-text);
+	border: none;
+	cursor: pointer;
+}
+
+.smp-volume:hover::-webkit-slider-thumb {
+	background: var(--smp-accent);
+}
+
+/* ---- Now Playing tab (big iTunes/Spotify-style view) ---- */
+
+.smp-nptab {
+	position: relative;
+	isolation: isolate;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	text-align: center;
+	padding: clamp(16px, 3vh, 24px) 10px 28px;
+	overflow: hidden;
+}
+
+/* Soft, blurred blow-up of the current cover behind the hero - the
+   immersive-backdrop look modern players (Spotify, Apple Music) use so
+   the tab doesn't feel like a plain list with a thumbnail glued on top.
+   Negative z-index keeps it under the in-flow content below without
+   needing z-index on every sibling (see stacking-context painting order). */
+.smp-nptab-backdrop {
+	position: absolute;
+	z-index: -1;
+	top: -40px;
+	left: -20px;
+	right: -20px;
+	height: clamp(220px, 48vh, 400px);
+	background-size: cover;
+	background-position: center 35%;
+	background-repeat: no-repeat;
+	filter: blur(46px) saturate(1.35) brightness(0.5);
+	transform: scale(1.15);
+	opacity: 0;
+	transition: opacity 420ms ease;
+	pointer-events: none;
+	-webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0) 100%);
+	mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.45) 60%, rgba(0, 0, 0, 0) 100%);
+}
+
+.smp-nptab-backdrop.has-art {
+	opacity: 1;
+}
+
+.smp-nptab-art-wrap {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: min(320px, 78%);
+	max-width: 320px;
+	min-width: 0;
+	margin-bottom: 20px;
+	flex-shrink: 0;
+}
+
+.smp-nptab-hero {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 100%;
+	min-width: 0;
+}
+
+.smp-nptab-info {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 100%;
+	min-width: 0;
+}
+
+.smp-nptab-eyebrow {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--smp-accent);
+	margin-bottom: 12px;
+}
+
+.smp-nptab-art {
+	position: relative;
+	overflow: hidden;
+	width: 100%;
+	max-width: none;
+	aspect-ratio: 1;
+	height: auto;
+	font-size: clamp(48px, 18cqi, 78px);
+	margin-bottom: 0;
+	border-radius: 14px;
+	box-shadow: 0 24px 48px -18px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.smp-nptab-title {
+	font-weight: 700;
+	font-size: clamp(17px, 4.4cqi, 21px);
+	max-width: 100%;
+	width: 100%;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.smp-nptab-title.smp-marquee-active {
+	text-align: left;
+}
+
+.smp-nptab-artist {
+	color: var(--smp-text);
+	font-size: 14px;
+	margin-top: 6px;
+	max-width: 100%;
+	width: 100%;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.smp-nptab-artist.smp-marquee-active {
+	text-align: left;
+}
+
+.smp-nptab-album {
+	color: var(--smp-text-dim);
+	font-size: 12px;
+	margin-top: 2px;
+	max-width: 100%;
+	width: 100%;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.smp-nptab-album.smp-marquee-active {
+	text-align: left;
+}
+
+.smp-nptab-modes {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	margin-top: 8px;
+}
+
+.smp-nptab-queue {
+	width: 100%;
+	max-width: 520px;
+	margin-top: 32px;
+	padding-top: 16px;
+	border-top: 1px solid var(--smp-border);
+	text-align: left;
+}
+
+.smp-nptab-queue-heading {
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--smp-text-dim);
+	margin-bottom: 8px;
+}
+
+/* ---- In-game overlay mini player ---- */
+
+.smp-overlay-widget {
+	position: fixed;
+	right: max(12px, env(safe-area-inset-right, 0px));
+	bottom: max(12px, env(safe-area-inset-bottom, 0px));
+	left: auto;
+	top: auto;
+	transform: none;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	background: rgba(10, 10, 11, 0.92);
+	border: 1px solid var(--smp-border);
+	border-radius: 6px;
+	padding: 8px 14px;
+	color: var(--smp-text);
+	font-family: "Motiva Sans", Arial, sans-serif;
+	font-size: 12px;
+	z-index: 2147483000;
+	backdrop-filter: blur(4px);
+	max-width: calc(100vw - 84px);
+	box-sizing: border-box;
+	min-width: 0;
+	/* Sit just to the left of the floating note launcher. */
+	margin-right: 60px;
+}
+
+/* The compact dock is hidden outright while the panel is open (see
+ * setPanelOpen), since the panel carries its own now-playing bar and two
+ * sets of transport controls on screen at once is just clutter. */
+
+.smp-overlay-art {
+	width: 32px;
+	height: 32px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 18px;
+	color: var(--smp-accent);
+	background-size: cover;
+	background-position: center;
+	border-radius: 3px;
+}
+
+.smp-overlay-art {
+	position: relative;
+	overflow: hidden;
+}
+
+.smp-overlay-art.has-art {
+	color: transparent;
+}
+
+.smp-overlay-info {
+	min-width: 0;
+	flex: 1 1 120px;
+	max-width: 200px;
+	overflow: hidden;
+}
+
+.smp-overlay-title {
+	font-weight: 600;
+}
+
+.smp-overlay-artist {
+	color: var(--smp-text-dim);
+}
+
+.smp-overlay-controls {
+	display: flex;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+/* ---- Responsive: narrow / short Steam windows ---- */
+
+@container smp-panel (max-width: 560px) {
+	.smp-panel-header {
+		padding: 6px 8px;
+	}
+
+	.smp-tab {
+		padding: 5px 8px;
+		font-size: 12px;
+	}
+
+	.smp-subtab {
+		padding: 3px 7px;
+		font-size: 11px;
+	}
+
+	.smp-body {
+		--smp-panel-pad: 8px;
+		padding: 8px;
+	}
+
+	.smp-nowplaying {
+		padding: 6px 8px;
+		gap: 6px 8px;
+	}
+
+	.smp-nowplaying-info {
+		flex: 1 1 calc(100% - 140px);
+		max-width: none;
+	}
+
+	.smp-seek {
+		flex: 1 1 100%;
+		order: 5;
+		min-width: 0;
+	}
+
+	.smp-time {
+		order: 6;
+	}
+
+	.smp-volume {
+		order: 7;
+		width: 56px;
+		max-width: none;
+	}
+
+	.smp-album-grid {
+		grid-template-columns: repeat(auto-fill, minmax(min(100px, 100%), 1fr));
+		gap: 8px;
+	}
+
+	.smp-nptab-art-wrap {
+		width: min(240px, 66%);
+	}
+}
+
+@container smp-panel (max-width: 420px) {
+	.smp-search {
+		flex: 1 1 100%;
+		order: 3;
+		width: 100%;
+		max-width: none;
+	}
+
+	.smp-nowplaying-info {
+		flex: 1 1 100%;
+		max-width: none;
+	}
+
+	.smp-nowplaying-controls {
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.smp-volume {
+		width: 72px;
+	}
+
+	.smp-nptab-art-wrap {
+		width: min(180px, 72%);
+		max-width: 180px;
+	}
+}
+
+@media (max-height: 700px) {
+	.smp-panel {
+		height: min(520px, calc(100vh - 88px));
+		max-height: calc(100vh - 88px - var(--smp-chrome-bottom, 0px));
+		bottom: calc(var(--smp-chrome-bottom, 0px) + 64px);
+	}
+
+	.smp-launcher {
+		width: 44px;
+		height: 44px;
+		font-size: 20px;
+	}
+
+	.smp-empty {
+		padding: 20px 12px;
+	}
+}
+
+/* Small screen (a genuinely low-res/small display running fullscreen, or
+   a Steam window squashed down manually) - either way, the viewport
+   itself is short. 820px comfortably covers common small-laptop/handheld
+   heights like 1366x768 and 1280x720, not just extreme cases.
+   There isn't vertical room for a tall centered hero (backdrop + eyebrow
+   + big square art + stacked text) without everything, art included,
+   shrinking to fit. Go wide instead: art pinned to the left sized off
+   the viewport height directly (so it stays the priority, not an
+   afterthought squeezed by decoration/margins), track info beside it.
+   Deliberately a @media query on the real viewport, not a @container
+   query on the panel - it's the *screen* that's small here, and the
+   panel's own rendered size doesn't reliably reflect that. */
+@media (max-height: 820px) {
+	.smp-nptab {
+		padding: 10px 14px;
+	}
+
+	.smp-nptab-backdrop {
+		display: none;
+	}
+
+	.smp-nptab-hero {
+		flex-direction: row;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 16px;
+	}
+
+	.smp-nptab-art-wrap {
+		width: clamp(120px, 34vh, 190px);
+		max-width: none;
+		margin-bottom: 0;
+	}
+
+	.smp-nptab-art {
+		border-radius: 10px;
+		box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.06);
+	}
+
+	/* Art stays left; song info is centered in the remaining space. */
+	.smp-nptab-info {
+		width: auto;
+		flex: 1 1 auto;
+		align-items: center;
+		text-align: center;
+		min-width: 0;
+	}
+
+	.smp-nptab-title {
+		order: 1;
+	}
+
+	.smp-nptab-artist {
+		order: 2;
+	}
+
+	.smp-nptab-album {
+		order: 3;
+	}
+
+	.smp-nptab-eyebrow {
+		display: block;
+		order: 4;
+		margin-top: 10px;
+		margin-bottom: 0;
+	}
+
+	.smp-nptab-queue {
+		margin-top: 14px;
+		padding-top: 10px;
+	}
+}
+
+@media (max-width: 720px) {
+	.smp-panel {
+		right: 8px;
+		width: min(640px, calc(100vw - 16px));
+		max-width: calc(100vw - 16px);
+	}
+
+	.smp-launcher {
+		right: 8px;
+		bottom: calc(var(--smp-chrome-bottom, 0px) + 8px);
+	}
+}
+
+@media (max-width: 480px) {
+	.smp-overlay-widget {
+		padding: 6px 10px;
+		gap: 6px;
+		max-width: calc(100vw - 84px);
+		margin-right: 56px;
+	}
+
+	.smp-overlay-info {
+		max-width: none;
+	}
+}
+
+/* ---- User appearance modes ---- */
+
+.smp-settings-subtabs {
+	position: sticky;
+	top: 0;
+	padding-top: 2px;
+	z-index: 5;
+}
+
+.smp-panel.smp-density-compact .smp-album-grid {
+	grid-template-columns: repeat(auto-fill, minmax(min(92px, 100%), 1fr));
+	gap: 6px;
+}
+
+.smp-panel.smp-density-compact .smp-album-card {
+	padding: 5px;
+}
+
+.smp-panel.smp-density-compact .smp-track-row {
+	gap: 6px;
+	padding: 3px 6px;
+}
+
+.smp-panel.smp-density-compact .smp-disc-header {
+	padding: 8px 6px 2px;
+}
+
+.smp-panel.smp-density-compact .smp-album-title,
+.smp-panel.smp-density-compact .smp-album-artist {
+	font-size: 11px;
+}
+
+.smp-panel.smp-art-small .smp-album-grid {
+	grid-template-columns: repeat(auto-fill, minmax(min(100px, 100%), 1fr));
+}
+
+.smp-panel.smp-art-large .smp-album-grid {
+	grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+}
+
+.smp-panel.smp-art-small .smp-album-art-large {
+	width: clamp(64px, 18cqi, 82px);
+	height: clamp(64px, 18cqi, 82px);
+}
+
+.smp-panel.smp-art-large .smp-album-art-large {
+	width: clamp(92px, 26cqi, 124px);
+	height: clamp(92px, 26cqi, 124px);
+}
+
+.smp-panel.smp-art-small .smp-nptab-art-wrap {
+	width: min(240px, 62%);
+	max-width: 240px;
+}
+
+.smp-panel.smp-art-large .smp-nptab-art-wrap {
+	width: min(360px, 86%);
+	max-width: 360px;
+}
+
+.smp-panel.smp-np-style-clean .smp-nptab-backdrop,
+.smp-panel.smp-np-style-minimal .smp-nptab-backdrop {
+	display: none;
+}
+
+.smp-panel.smp-np-style-clean .smp-nptab {
+	background: var(--smp-bg);
+}
+
+.smp-panel.smp-np-style-minimal .smp-nptab {
+	padding-top: 10px;
+}
+
+.smp-panel.smp-np-style-minimal .smp-nptab-eyebrow {
+	display: none;
+}
+
+.smp-panel.smp-np-style-minimal .smp-nptab-art-wrap {
+	width: min(210px, 58%);
+	max-width: 210px;
+	margin-bottom: 12px;
+}
+
+.smp-panel.smp-np-style-minimal .smp-nptab-art {
+	border-radius: 4px;
+	box-shadow: 0 0 0 1px var(--smp-border);
+}
+
+.smp-panel.smp-np-style-minimal .smp-nptab-queue {
+	margin-top: 18px;
+	padding-top: 10px;
+}
+
+.smp-panel.smp-motion-reduced *,
+.smp-panel.smp-motion-reduced *::before,
+.smp-panel.smp-motion-reduced *::after {
+	transition-duration: 0.01ms !important;
+}
+
+.smp-panel.smp-motion-off *,
+.smp-panel.smp-motion-off *::before,
+.smp-panel.smp-motion-off *::after {
+	animation: none !important;
+	transition: none !important;
+}
+
+@media (max-height: 820px) {
+	.smp-panel.smp-np-style-dynamic .smp-nptab-backdrop {
+		display: block;
+		top: -10px;
+		height: calc(100% + 20px);
+		filter: blur(38px) saturate(1.25) brightness(0.42);
+		-webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.45) 70%, rgba(0, 0, 0, 0) 100%);
+		mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.45) 70%, rgba(0, 0, 0, 0) 100%);
+	}
+
+	.smp-panel.smp-art-small .smp-nptab-art-wrap {
+		width: clamp(96px, 26vh, 150px);
+		max-width: none;
+	}
+
+	.smp-panel.smp-art-large .smp-nptab-art-wrap {
+		width: clamp(150px, 40vh, 220px);
+		max-width: none;
+	}
+
+	.smp-panel.smp-np-style-minimal .smp-nptab-art-wrap {
+		width: clamp(100px, 28vh, 160px);
+		max-width: none;
+		margin-bottom: 0;
+	}
+}
