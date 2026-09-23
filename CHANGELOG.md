@@ -19,6 +19,7 @@ One shipped change, one bump. Do it in the same edit as the fix, and add a line 
 
 ## 1.4.0
 
+- Millennium lists this plugin as Doomy's SteamTunes.
 - Playlist files inside a music folder show up under Playlists. M3U, M3U8, and PLS are read when the library is scanned. The player queues the tracks from those files that are already in the library.
 - Library search runs only when you press Enter. Typing, including typing quickly, does not look anything up and does not refresh the list.
 - A one-letter search matches names that start with that letter. It no longer matches filler words such as "of" or "the" later in the name.

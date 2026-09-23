@@ -20,7 +20,7 @@ Local development, from this repo:
 .\scripts\deploy.ps1
 ```
 
-Then fully restart Steam and enable **Steam Music Player** under
+Then fully restart Steam and enable **Doomy's SteamTunes** under
 **Settings -> Interface -> Millennium -> Plugins**.
 
 Players who install from Millennium's plugin list update from
@@ -107,7 +107,7 @@ access to do so itself.
 Automated testing can't reach into Steam's actual UI, so after deploying:
 
 1. Restart Steam, confirm the plugin loads without errors (Millennium ->
-   Plugins -> Steam Music Player -> View Logs).
+   Plugins -> Doomy's SteamTunes -> View Logs).
 2. Click the floating note button in the bottom-right of the Steam client,
    add a music folder, rescan, and play an album.
 3. Launch any game, press Shift+Tab, and confirm the mini-player appears and
