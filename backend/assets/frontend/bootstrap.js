@@ -37,7 +37,7 @@
 	var BASES = ["https://steamloopback.host/steam-music-player/", "/steam-music-player/"];
 	// Bump this whenever steam-music-player.js/css/audio-engine.js change so
 	// CEF cannot keep serving a stale steamui copy after a plugin update.
-	var ASSET_REV = "20260922-empty-library";
+	var ASSET_REV = "20260922-version-1.5.0";
 
 	function head() {
 		return document.head || document.documentElement;

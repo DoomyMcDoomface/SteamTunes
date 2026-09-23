@@ -31,7 +31,7 @@
 
 	var PLUGIN_DISPLAY_NAME = "Doomy's SteamTunes beta";
 	// Keep this identical to "version" in plugin.json. When to bump: CHANGELOG.md.
-	var PLUGIN_VERSION = "1.4.0";
+	var PLUGIN_VERSION = "1.5.0";
 
 	var SCRIPT_SRC = (document.currentScript && document.currentScript.src) || "";
 

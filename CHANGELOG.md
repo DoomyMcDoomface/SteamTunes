@@ -17,12 +17,15 @@ One shipped change, one bump. Do it in the same edit as the fix, and add a line 
 - **Minor** (`1.0.2` → `1.1.0`): a new capability, or a behavior people will notice as new. Patch goes back to `0`. A feature and a fix in the same ship is a minor bump, not both.
 - **Major** (`1.4.2` → `2.0.0`): saved settings, the library, or the queue from the previous major cannot be used unchanged. Minor and patch go back to `0`.
 
-## 1.4.0
+## 1.5.0
 
 - Millennium lists this plugin as Doomy's SteamTunes.
 - First install uses Steam Blue. A color already chosen in Appearance stays as it is.
 - First install also turns on gapless playback with a 2 second crossfade, match-loudness at -20 LUFS, ducking at 80%, and a flat EQ. Spatial audio stays off. A setup already saved is left as it is.
 - An empty library tells you no music was detected and opens Settings so you can scan a music folder.
+
+## 1.4.0
+
 - Playlist files inside a music folder show up under Playlists. M3U, M3U8, and PLS are read when the library is scanned. The player queues the tracks from those files that are already in the library.
 - Library search runs only when you press Enter. Typing, including typing quickly, does not look anything up and does not refresh the list.
 - A one-letter search matches names that start with that letter. It no longer matches filler words such as "of" or "the" later in the name.
