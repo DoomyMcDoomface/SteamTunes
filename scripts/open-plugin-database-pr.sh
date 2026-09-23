@@ -61,9 +61,12 @@ JS
 
 git clone "https://github.com/${upstream_repo}.git" "$work/PluginDatabase"
 cd "$work/PluginDatabase"
-git remote add fork "https://github.com/${owner}/PluginDatabase.git"
-# Credential for the push stays inside this throwaway clone.
-git config --local "http.https://github.com/.extraheader" "AUTHORIZATION: bearer ${GH_TOKEN}"
+# actions/checkout leaves a global Authorization header for the workflow token.
+# Git sends that header on every github.com URL, then asks for a username
+# instead of using the Plugin Database token. Remove it in this job.
+git config --global --unset-all http.https://github.com/.extraheader || true
+# Credential stays in this throwaway clone's remote URL and is never written to the repo.
+git remote add fork "https://x-access-token:${GH_TOKEN}@github.com/${owner}/PluginDatabase.git"
 git config --local user.name "github-actions[bot]"
 git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
