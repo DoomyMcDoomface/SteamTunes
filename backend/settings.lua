@@ -67,7 +67,7 @@ local DEFAULTS = {
 	artworkEmphasis = "balanced", -- small | balanced | large
 	libraryDensity = "comfortable", -- comfortable | compact
 	motionLevel = "full", -- full | reduced | off
-	uiColorTheme = "red", -- red | blue | green | steam | custom
+	uiColorTheme = "steam", -- red | blue | green | steam | custom. steam is the first-install default.
 	uiCustomColor = "#b33232",
 }
 

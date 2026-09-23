@@ -8,20 +8,18 @@
  */
 
 :root {
-	/* Neutral black + red palette matching the SteamSkin theme.
-	 * Deliberately hardcoded rather than deferring to
-	 * --SystemAccentColor/Dark1 - those reflect the user's Steam UI theme
-	 * (often blue by default), which fought with this plugin's own red
-	 * theme instead of matching it. */
-	--smp-bg: #0e0e0f;
-	--smp-bg-elevated: #17181a;
-	--smp-bg-panel: #121214;
-	--smp-border: #2a2b2e;
-	--smp-accent: #b33232;
-	--smp-accent-dark: #7a1f1f;
-	--smp-accent-soft: rgba(179, 50, 50, 0.15);
-	--smp-accent-ring: rgba(179, 50, 50, 0.4);
-	--smp-text: #d9dadd;
+	/* First-install palette: Steam's grey-blue chrome and #66C0F4 accent.
+	 * A saved Appearance choice overrides these from script. Hardcoded
+	 * rather than --SystemAccentColor, which follows the Windows accent. */
+	--smp-bg: #171a21;
+	--smp-bg-elevated: #1b2838;
+	--smp-bg-panel: #16202d;
+	--smp-border: #2a475e;
+	--smp-accent: #66c0f4;
+	--smp-accent-dark: #417a9b;
+	--smp-accent-soft: rgba(102, 192, 244, 0.15);
+	--smp-accent-ring: rgba(102, 192, 244, 0.4);
+	--smp-text: #c7d5e0;
 	--smp-text-dim: #8f98a0;
 	--smp-danger: #c0392b;
 }

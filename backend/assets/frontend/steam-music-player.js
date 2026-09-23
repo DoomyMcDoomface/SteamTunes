@@ -45,12 +45,12 @@
 		".smp-hidden{display:none !important}",
 		".smp-launcher{position:fixed !important;right:12px;",
 		"bottom:calc(var(--smp-chrome-bottom, 0px) + 12px);width:48px;height:48px;",
-		"border-radius:50%;background:var(--smp-bg,#000);color:var(--smp-accent,#b33232);font-size:22px;border:1px solid var(--smp-border,#2a2b2e);",
+		"border-radius:50%;background:var(--smp-bg,#171a21);color:var(--smp-accent,#66c0f4);font-size:22px;border:1px solid var(--smp-border,#2a475e);",
 		"cursor:pointer;z-index:2147483000;display:flex;align-items:center;justify-content:center}",
 		".smp-panel{position:fixed !important;right:12px;",
 		"bottom:calc(var(--smp-chrome-bottom, 0px) + 72px);",
 		"width:min(640px,calc(100vw - 24px));height:min(520px,calc(100vh - 96px));",
-		"background:var(--smp-bg,#0e0e0f);color:var(--smp-text,#d9dadd);border:1px solid var(--smp-border,#2a2b2e);border-radius:4px;",
+		"background:var(--smp-bg,#171a21);color:var(--smp-text,#c7d5e0);border:1px solid var(--smp-border,#2a475e);border-radius:4px;",
 		"z-index:2147483000;display:flex;flex-direction:column;overflow:hidden;",
 		'font-family:"Motiva Sans",Arial,sans-serif;font-size:13px}',
 		".smp-hidden{display:none !important}",
@@ -4356,7 +4356,7 @@
 		},
 
 		applyColorTheme: function () {
-			var theme = App.settings.uiColorTheme || "red";
+			var theme = App.settings.uiColorTheme || "steam";
 			var palette = UI.colorThemes[theme];
 			if (!palette && theme === "custom") {
 				var custom = String(App.settings.uiCustomColor || "#b33232").toLowerCase();
@@ -4375,7 +4375,7 @@
 				};
 			}
 			if (!palette) {
-				palette = UI.colorThemes.red;
+				palette = UI.colorThemes.steam;
 			}
 			var root = document.documentElement;
 			root.style.setProperty("--smp-bg", palette.bg);
@@ -7943,12 +7943,12 @@
 			var row = el("div", "smp-settings-row smp-color-theme-row");
 			row.appendChild(el("span", "smp-settings-label", { text: "UI Color" }));
 			var choices = el("div", "smp-color-swatches");
-			var current = App.settings.uiColorTheme || "red";
+			var current = App.settings.uiColorTheme || "steam";
 			[
+				{ value: "steam", label: "Steam Blue", color: "#66c0f4" },
 				{ value: "red", label: "Red", color: "#b33232" },
 				{ value: "blue", label: "Blue", color: "#3d8bfd" },
 				{ value: "green", label: "Green", color: "#3d9b4a" },
-				{ value: "steam", label: "Steam Blue", color: "#66c0f4" },
 				{ value: "custom", label: "Custom", color: App.settings.uiCustomColor || "#b33232" },
 			].forEach(function (option) {
 				var swatch = el("button", "smp-color-swatch" + (current === option.value ? " active" : ""), {
@@ -7978,7 +7978,7 @@
 			wrapper.appendChild(
 				el("div", "smp-hint", {
 					text:
-						"Red is the default. Steam blue uses Steam's own grey-blue chrome (#171A21) and accent (#66C0F4). Custom opens a color wheel for any accent.",
+						"Steam Blue is the default. It uses Steam's own grey-blue chrome (#171A21) and accent (#66C0F4). Custom opens a color wheel for any accent.",
 				})
 			);
 			if (current === "custom") {

@@ -46,7 +46,7 @@ const info = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const sha = process.argv[4];
 const version = process.argv[5];
 const body = [
-	"Ships Steam Music Player **" + version + "** from the `production` branch.",
+	"Ships Doomy's SteamTunes **" + version + "** from the `production` branch.",
 	"",
 	"- Commit: [`" + sha + "`](https://github.com/DoomyMcDoomface/SteamTunes/commit/" + sha + ")",
 	"- The submodule tracks `production`. Further work stays on `main` and `dev` until the next release merge.",
@@ -101,11 +101,11 @@ if git diff --cached --quiet; then
 fi
 
 if [ "$already_listed" = "true" ]; then
-	title="Update Steam Music Player"
-	commit_message="Update Steam Music Player to ${version}"
+	title="Update Doomy's SteamTunes"
+	commit_message="Update Doomy's SteamTunes to ${version}"
 else
-	title="Add Steam Music Player"
-	commit_message="Add Steam Music Player"
+	title="Add Doomy's SteamTunes"
+	commit_message="Add Doomy's SteamTunes"
 fi
 
 git commit -m "$commit_message"
@@ -117,7 +117,8 @@ else
 	git push -u fork "HEAD:${pr_branch}"
 fi
 
-existing="$(gh pr list --repo "$upstream_repo" --head "${owner}:${pr_branch}" --base main --state open --json number --jq '.[0].number')"
+# gh pr list --head does not see a fork pull request on this repo. The pulls API does.
+existing="$(gh api "repos/${upstream_repo}/pulls?head=${owner}:${pr_branch}&state=open" --jq '.[0].number')"
 if [ -n "$existing" ] && [ "$existing" != "null" ]; then
 	gh pr edit "$existing" --repo "$upstream_repo" --title "$title" --body-file "$work/pr-body.md"
 	echo "Updated https://github.com/${upstream_repo}/pull/${existing}"
