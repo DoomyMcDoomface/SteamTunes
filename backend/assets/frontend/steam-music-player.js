@@ -7097,6 +7097,20 @@
 			}
 		},
 
+		libraryEmptyPrompt: function () {
+			var wrap = el("div", "smp-library-empty");
+			wrap.appendChild(el("div", "smp-library-empty-title", { text: "No Music Detected" }));
+			var openSettings = el("button", "smp-btn smp-library-empty-action", {
+				type: "button",
+				text: "Scan Your Music Folder in the Settings tab",
+			});
+			openSettings.addEventListener("click", function () {
+				UI.switchTab("settings");
+			});
+			wrap.appendChild(openSettings);
+			return wrap;
+		},
+
 		renderLibrary: function () {
 			if (!UI.root) {
 				return;
@@ -7194,9 +7208,7 @@
 				} else if (!UI.libraryAppliedFromServer) {
 					pane.appendChild(el("div", "smp-empty", { text: "Loading library..." }));
 				} else {
-					pane.appendChild(
-						el("div", "smp-empty", { text: "No tracks found. Add a music folder in Settings, then Rescan." })
-					);
+					pane.appendChild(UI.libraryEmptyPrompt());
 				}
 				pane.scrollTop = 0;
 				return;
