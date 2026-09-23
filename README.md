@@ -8,13 +8,13 @@ overlay (Shift+Tab) of every running game - not a separate app window.
 This is a **plugin** (has a Lua backend for filesystem access). The neutral
 dark theme is a separate repo, SteamSkin.
 
-Baseline version: **1.3.6**. The number in `plugin.json` and the About
+Baseline version: **1.4.0**. The number in `plugin.json` and the About
 screen are the same number. When it moves, and the log of each build, is
 `CHANGELOG.md`.
 
 ## Install
 
-From this repo:
+Local development, from this repo:
 
 ```powershell
 .\scripts\deploy.ps1
@@ -22,6 +22,38 @@ From this repo:
 
 Then fully restart Steam and enable **Steam Music Player** under
 **Settings -> Interface -> Millennium -> Plugins**.
+
+Players who install from Millennium's plugin list update from
+**Settings -> Updates** once a production release has been merged into the
+Plugin Database. That update copies the new package over the installed
+plugin and leaves `backend/data` (the library, queue, and settings) in place.
+
+## Shipping
+
+`production` is the branch Millennium receives. `main` and `dev` are where
+work lands first. A release is a merge to `production` whose `plugin.json`
+version, About `PLUGIN_VERSION`, and `CHANGELOG.md` heading all moved
+together.
+
+Pushing that merge runs **Publish production to Millennium**. The workflow
+opens or updates a pull request on
+[SteamClientHomebrew/PluginDatabase](https://github.com/SteamClientHomebrew/PluginDatabase)
+that pins `plugins/SteamTunes` to the new `production` commit and records
+`branch = production`. Millennium's update check compares the commit a
+player has installed with that pin. When the pull request is merged, the
+Updates tab shows the patch.
+
+The workflow opens that pull request when the `plugin.json` version on
+`production` changes, and when SteamTunes is not listed yet. Run it by hand
+from the Actions tab to retry the current production commit.
+
+It needs a repository secret named `PLUGIN_DATABASE_TOKEN`: a classic
+personal access token with the `public_repo` scope, so it can fork the
+Plugin Database and open the pull request.
+
+Plugin Database's own build runs `pnpm run build`, which creates the
+`.millennium` directory their packager requires. The player UI is the
+Lua-injected frontend.
 
 ## How it works
 

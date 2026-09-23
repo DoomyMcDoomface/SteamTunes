@@ -1,0 +1,7 @@
+{
+	"name": "steam-music-player",
+	"private": true,
+	"scripts": {
+		"build": "node scripts/prepare-millennium-frontend.js"
+	}
+}

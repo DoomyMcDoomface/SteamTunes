@@ -1,0 +1,54 @@
+name: Publish production to Millennium
+
+on:
+  push:
+    branches:
+      - production
+  workflow_dispatch:
+
+concurrency:
+  group: publish-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: plugin.json, About, and CHANGELOG agree
+        run: node scripts/release-info.js --check
+
+      - name: Decide if this production push ships
+        id: ship
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: bash scripts/should-ship.sh
+
+      - name: Require the Plugin Database token
+        if: steps.ship.outputs.ship == 'true'
+        env:
+          PLUGIN_DATABASE_TOKEN: ${{ secrets.PLUGIN_DATABASE_TOKEN }}
+        run: |
+          if [ -z "$PLUGIN_DATABASE_TOKEN" ]; then
+            echo "::error::Add the repository secret PLUGIN_DATABASE_TOKEN. Use a classic PAT with the public_repo scope so this workflow can fork SteamClientHomebrew/PluginDatabase and open the update pull request."
+            exit 1
+          fi
+
+      - name: Open the Plugin Database pull request
+        if: steps.ship.outputs.ship == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PLUGIN_DATABASE_TOKEN }}
+          RELEASE_VERSION: ${{ steps.ship.outputs.version }}
+        run: bash scripts/open-plugin-database-pr.sh

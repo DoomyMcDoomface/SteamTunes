@@ -1,3 +1,5 @@
 backend/data/
 *.zip
 .shots/
+node_modules/
+.millennium/

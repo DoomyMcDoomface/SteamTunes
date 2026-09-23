@@ -86,6 +86,9 @@ local function sync_bootstrap_to_theme_host()
 		fs.create_directories(destDir)
 		local content = utils.read_file(fs.join(backendDir, "assets/frontend/bootstrap.js"))
 		utils.write_file(fs.join(destDir, "bootstrap.js"), content)
+		-- Same bytes under a new name so a cached bootstrap.js cannot keep
+		-- loading the old player that searched on every keystroke.
+		utils.write_file(fs.join(destDir, "bootstrap-20260922-search.js"), content)
 		logger:info("[SteamMusicPlayer] synced bootstrap into " .. destDir)
 	end)
 	if not ok then
@@ -114,7 +117,7 @@ local injectionState = {
 -- cached copy is fine, and it loads the assets that do change (plus the
 -- stylesheet) from steamloopback.host, which always serves them fresh.
 local function register_injections(caller)
-	local bootstrapId = millennium.add_browser_js(INJECT_SUBDIR .. "/bootstrap.js", ".*")
+	local bootstrapId = millennium.add_browser_js(INJECT_SUBDIR .. "/bootstrap-20260922-search.js", ".*")
 	injectionState.bootstrapId = bootstrapId
 	injectionState.registered = true
 
@@ -368,6 +371,7 @@ function rescan_library_start(forceAll, newOnly)
 		pendingCount = result.pendingCount or 0,
 		newOnly = result.newOnly == true,
 		added = result.added or 0,
+		playlistsUpdated = result.playlistsUpdated or 0,
 	})
 end
 
@@ -383,6 +387,7 @@ function scan_library_batch(batchSize)
 		totalTracks = result.totalTracks,
 		pendingCount = result.pendingCount,
 		added = result.added or 0,
+		playlistsUpdated = result.playlistsUpdated or 0,
 		lastPath = result.lastPath, -- TEMPORARY: crash-diagnosis aid
 	})
 end

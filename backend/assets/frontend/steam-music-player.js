@@ -31,7 +31,7 @@
 
 	var PLUGIN_DISPLAY_NAME = "Doomy's SteamTunes beta";
 	// Keep this identical to "version" in plugin.json. When to bump: CHANGELOG.md.
-	var PLUGIN_VERSION = "1.3.6";
+	var PLUGIN_VERSION = "1.4.0";
 
 	var SCRIPT_SRC = (document.currentScript && document.currentScript.src) || "";
 
@@ -3122,7 +3122,7 @@
 				'    <button class="smp-tab active" data-tab="library">Library</button>' +
 				'    <button class="smp-tab" data-tab="settings">Settings</button>' +
 				"  </div>" +
-				'  <input class="smp-search" type="text" placeholder="Search library..." />' +
+				'  <input class="smp-search" type="text" placeholder="Search library..." autocomplete="off" spellcheck="false" />' +
 				'  <button class="smp-close" title="Close">&times;</button>' +
 				"</div>" +
 				'<div class="smp-scan-banner smp-hidden"></div>' +
@@ -3150,28 +3150,68 @@
 			}
 
 			var search = root.querySelector(".smp-search");
-			search.addEventListener("input", function (event) {
-				UI.searchQuery = event.target.value.toLowerCase();
-				UI.pendingBrowseScroll = 0;
-				UI.renderLibrary();
-				UI.syncPointerToBackend(false);
+			search.title = "Press Enter to search";
+			search.addEventListener("keydown", function (event) {
+				UI.beginSearchHold();
+				if (event.isComposing || event.keyCode === 229) {
+					return;
+				}
+				if (event.key !== "Enter" && event.keyCode !== 13) {
+					return;
+				}
+				event.preventDefault();
+				UI.commitSearch();
 			});
+			search.addEventListener("input", function (event) {
+				event.stopPropagation();
+				if (String(search.value || "").toLowerCase() === String(UI.searchQuery || "")) {
+					return;
+				}
+				UI.beginSearchHold();
+			});
+			search.addEventListener("focus", function () {
+				UI.beginSearchHold();
+			});
+			search.addEventListener("blur", function () {
+				UI.endSearchHold();
+			});
+			document.addEventListener(
+				"pointerdown",
+				function (event) {
+					if (!UI.searchHold || !UI.root) {
+						return;
+					}
+					var box = UI.root.querySelector(".smp-search");
+					if (!box || event.target === box || (box.contains && box.contains(event.target))) {
+						return;
+					}
+					UI.endSearchHold();
+				},
+				true
+			);
 
 			UI.loadAll();
 		},
 
 		setPanelOpen: function (open, fromShared) {
+			var wasOpen = !!UI.panelOpen;
 			UI.panelOpen = open;
 			if (UI.root) {
 				UI.root.classList.toggle("smp-hidden", !open);
 			}
-			if (open) {
+			// A shared poll arrives several times a second. Rebuilding the
+			// Artist/Album grid on each one looks like the page is refreshing
+			// and puts the search text back. Only draw when the panel is
+			// actually opening; later polls update the view if it changed.
+			if (open && !(fromShared && wasOpen)) {
 				UI.ensureLibraryLoaded();
 				if (UI.currentTab === "settings") {
 					UI.safely("renderSettingsView", UI.renderSettingsView);
 				} else {
 					UI.safely("renderLibrary", UI.renderLibrary);
 				}
+			} else if (open) {
+				UI.ensureLibraryLoaded();
 			}
 			// The overlay's compact dock is a stand-in for the panel's own
 			// now-playing bar, so showing both at once just stacks two sets
@@ -3265,7 +3305,7 @@
 		},
 
 		applyChromeFromState: function (state) {
-			if (!state || !UI.root) {
+			if (!state || !UI.root || UI.searchHold) {
 				return;
 			}
 			var pointer = pointerFromState(state);
@@ -3276,7 +3316,6 @@
 			UI.currentTab = pointer.currentTab;
 			UI.settingsSubtab = pointer.settingsSubtab;
 			UI.libraryGroupBy = pointer.libraryGroupBy;
-			UI.searchQuery = pointer.searchQuery || "";
 			UI.libraryDrill = UI.hydrateLibraryDrill(pointer.libraryDrill);
 			if (Object.prototype.hasOwnProperty.call(state, "libraryHistory")) {
 				UI.browseHistory = sanitizeBrowseHistory(state.libraryHistory);
@@ -3284,8 +3323,18 @@
 			UI.switchTab(pointer.currentTab, true);
 			UI.setPanelOpen(pointer.panelOpen, true);
 			var search = UI.root.querySelector(".smp-search");
-			if (search && search.value !== UI.searchQuery) {
-				search.value = UI.searchQuery;
+			// The box keeps whatever the user has typed, including a
+			// half-deleted word. Copying the saved query back in is what
+			// made Backspace flicker and restore the old text.
+			var draft = search ? String(search.value || "").toLowerCase() : String(UI.searchQuery || "");
+			if (draft === String(UI.searchQuery || "")) {
+				UI.searchQuery = pointer.searchQuery || "";
+				if (search && search.value.toLowerCase() !== UI.searchQuery) {
+					search.value = UI.searchQuery;
+				}
+			}
+			if (pointer.panelOpen && pointer.currentTab !== "settings") {
+				UI.renderLibraryIfChanged();
 			}
 			reportEvent(
 				"pointer apply tab=" +
@@ -3295,13 +3344,28 @@
 					" drill=" +
 					((pointer.libraryDrill && pointer.libraryDrill.mode) || "none")
 			);
-			if (pointer.panelOpen) {
-				if (pointer.currentTab === "settings") {
-					UI.safely("renderSettingsView", UI.renderSettingsView);
-				} else {
-					UI.safely("renderLibrary", UI.renderLibrary);
-				}
+			if (pointer.panelOpen && pointer.currentTab === "settings") {
+				UI.safely("renderSettingsView", UI.renderSettingsView);
 			}
+		},
+
+		libraryViewSig: function () {
+			var drill = UI.libraryDrill;
+			return [
+				UI.currentTab || "",
+				UI.libraryGroupBy || "",
+				drill ? [drill.mode, drill.artist || "", drill.album || "", drill.genre || ""].join("/") : "",
+				UI.searchQuery || "",
+				String(asArray(App.library).length),
+			].join("\0");
+		},
+
+		renderLibraryIfChanged: function () {
+			var sig = UI.libraryViewSig();
+			if (sig === UI.paintedLibrarySig) {
+				return;
+			}
+			UI.safely("renderLibrary", UI.renderLibrary);
 		},
 
 		switchTab: function (tab, fromShared) {
@@ -3963,6 +4027,7 @@
 						pendingCount: startInfo.pendingCount || 0,
 						totalFiles: startInfo.totalFiles || 0,
 						totalTracks: null,
+						playlistsUpdated: startInfo.playlistsUpdated || 0,
 					});
 					if (!startInfo.pendingCount) {
 						return { done: true };
@@ -4006,6 +4071,15 @@
 		// still running, so newly-tagged tracks - however deep into the
 		// library they are - become playable without the user having to
 		// close/reopen the panel or restart Steam.
+		reloadPlaylists: function () {
+			return callServer("get_playlists").then(function (list) {
+				App.playlists = asArray(list);
+				if (UI.panelOpen && UI.libraryGroupBy === "playlists") {
+					UI.safely("renderLibrary", UI.renderLibrary);
+				}
+			});
+		},
+
 		refreshLibraryFromServer: function () {
 			return callServer("get_library_info")
 				.then(function (info) {
@@ -4115,6 +4189,9 @@
 				if (progress && (progress.pendingCount > 0 || progress.processed > 0)) {
 					hadWork = true;
 					UI.scheduleBackgroundLibraryRefresh();
+				}
+				if (progress && progress.playlistsUpdated) {
+					UI.reloadPlaylists();
 				}
 			}, false).then(function () {
 				return hadWork ? UI.refreshLibraryFromServer() : null;
@@ -4453,14 +4530,11 @@
 			return null;
 		},
 
-		// A plain substring scan matches "el" inside "Angel" and "Steel"
-		// just as happily as it matches something that actually starts
-		// with "el" - technically correct, but not what anyone means when
-		// they type the start of a name into a search box. Score/require
-		// matches at a word boundary instead: the start of the whole
-		// string, or the start of any individual word inside it (split on
-		// anything that isn't a letter/digit), so "el" finds "El-P" or
-		// "Electric Wizard" but not "Angel" or "Agent Steel".
+		// Match the start of the name, or the start of a later word, so
+		// "el" finds "Electric Wizard" and "El-P". A single letter only
+		// matches the start of the name: "o" would otherwise hit every
+		// "of" and "on" in the library. Filler words are skipped for the
+		// same reason.
 		smartTextMatch: function (raw, q) {
 			if (!q) {
 				return true;
@@ -4472,9 +4546,32 @@
 			if (text.indexOf(q) === 0) {
 				return true;
 			}
+			if (q.length < 2) {
+				return false;
+			}
+			var skip = {
+				a: true,
+				an: true,
+				and: true,
+				at: true,
+				by: true,
+				for: true,
+				in: true,
+				of: true,
+				on: true,
+				or: true,
+				the: true,
+				to: true,
+				with: true,
+			};
 			var words = text.split(/[^a-z0-9]+/i);
-			for (var i = 0; i < words.length; i++) {
-				if (words[i] && words[i].indexOf(q) === 0) {
+			var i;
+			for (i = 0; i < words.length; i++) {
+				var word = words[i];
+				if (!word || skip[word]) {
+					continue;
+				}
+				if (word.indexOf(q) === 0) {
 					return true;
 				}
 			}
@@ -4571,15 +4668,58 @@
 			}, durationMs || 5000);
 		},
 
-		clearSearch: function () {
-			if (!UI.searchQuery) {
+		searchHold: false,
+		searchRenderPending: false,
+		searchCommitRender: false,
+
+		beginSearchHold: function () {
+			UI.searchHold = true;
+		},
+
+		endSearchHold: function () {
+			if (!UI.searchHold) {
 				return;
 			}
-			UI.searchQuery = "";
+			UI.searchHold = false;
+			if (!UI.searchRenderPending) {
+				return;
+			}
+			UI.searchRenderPending = false;
+			UI.safely("renderLibrary", UI.renderLibrary);
+		},
+
+		commitSearch: function () {
+			var input = UI.root && UI.root.querySelector(".smp-search");
+			var value = input ? String(input.value || "").toLowerCase() : "";
+			var changed = value !== UI.searchQuery;
+			UI.searchHold = false;
+			if (!changed) {
+				if (UI.searchRenderPending) {
+					UI.searchRenderPending = false;
+					UI.safely("renderLibrary", UI.renderLibrary);
+				}
+				return;
+			}
+			UI.searchQuery = value;
+			UI.searchRenderPending = false;
+			UI.pendingBrowseScroll = 0;
+			UI.searchCommitRender = true;
+			UI.renderLibrary();
+			UI.searchCommitRender = false;
+			UI.syncPointerToBackend(true);
+		},
+
+		clearSearch: function () {
+			UI.searchHold = false;
+			UI.searchRenderPending = false;
 			var input = UI.root && UI.root.querySelector(".smp-search");
 			if (input) {
 				input.value = "";
 			}
+			if (!UI.searchQuery) {
+				return;
+			}
+			UI.searchQuery = "";
 		},
 
 		filteredLibrary: function () {
@@ -5935,6 +6075,7 @@
 				var page = UI.browseCache.pages[key];
 				if (page) {
 					page.metrics = null;
+					page.remeasured = false;
 				}
 				refresh();
 			};
@@ -6024,13 +6165,18 @@
 					UI.updateBrowseWindow(key);
 				}
 			}
-			if (page.layout !== "list" && page.metrics && !page.metrics.measured) {
+			if (page.layout !== "list" && page.metrics && !page.metrics.measured && !page.remeasured) {
 				var sample = page.grid.querySelector(".smp-album-card");
 				if (sample && sample.offsetHeight > 20) {
+					var nextRow = sample.offsetHeight + page.metrics.gap;
+					var rowChanged = Math.abs(nextRow - page.metrics.rowH) > 1;
 					page.metrics.cardH = sample.offsetHeight;
-					page.metrics.rowH = sample.offsetHeight + page.metrics.gap;
+					page.metrics.rowH = nextRow;
 					page.metrics.measured = true;
-					UI.updateBrowseWindow(key);
+					page.remeasured = true;
+					if (rowChanged) {
+						UI.updateBrowseWindow(key);
+					}
 				}
 			}
 		},
@@ -6942,8 +7088,12 @@
 
 		updateSearchPlaceholder: function () {
 			var search = UI.root && UI.root.querySelector(".smp-search");
-			if (search) {
-				search.placeholder = UI.searchPlaceholderForContext();
+			if (!search) {
+				return;
+			}
+			var placeholder = UI.searchPlaceholderForContext();
+			if (search.placeholder !== placeholder) {
+				search.placeholder = placeholder;
 			}
 		},
 
@@ -6951,6 +7101,11 @@
 			if (!UI.root) {
 				return;
 			}
+			if (UI.searchHold && !UI.searchCommitRender) {
+				UI.searchRenderPending = true;
+				return;
+			}
+			UI.paintedLibrarySig = UI.libraryViewSig();
 			var view = UI.root.querySelector(".smp-view-library");
 			if (!view) {
 				return;
@@ -7098,6 +7253,15 @@
 
 			var list = el("div", "smp-playlist-list");
 			var playlists = asArray(App.playlists);
+			playlists.sort(function (a, b) {
+				var an = String((a && a.name) || "");
+				var bn = String((b && b.name) || "");
+				var cmp = an.localeCompare(bn, undefined, { sensitivity: "base", numeric: true });
+				if (cmp !== 0) {
+					return cmp;
+				}
+				return String((a && a.id) || "").localeCompare(String((b && b.id) || ""));
+			});
 			if (UI.searchQuery) {
 				var q = UI.searchQuery;
 				playlists = playlists.filter(function (p) {
@@ -7144,18 +7308,23 @@
 						UI.safely("renderLibrary", UI.renderLibrary);
 					});
 				});
+				if (playlist.sourcePath) {
+					row.title = playlist.sourcePath;
+				}
 				row.appendChild(art);
 				row.appendChild(name);
 				row.appendChild(playBtn);
 				row.appendChild(playNextBtn);
 				row.appendChild(queueBtn);
-				row.appendChild(deleteBtn);
+				if (!playlist.sourcePath) {
+					row.appendChild(deleteBtn);
+				}
 				list.appendChild(row);
 			});
 			view.appendChild(list);
 
 			if (asArray(App.playlists).length === 0) {
-				view.appendChild(el("div", "smp-empty", { text: "No playlists yet. Create one above." }));
+				view.appendChild(el("div", "smp-empty", { text: "No playlists yet. Create one above, or put an M3U, M3U8, or PLS file in a music folder." }));
 			} else if (playlists.length === 0) {
 				view.appendChild(el("div", "smp-empty", { text: "No playlists match your search." }));
 			}
@@ -7224,7 +7393,7 @@
 			UI.appendCollapsibleSection(view, "folders", "Music folders", function (foldersSection) {
 			foldersSection.appendChild(
 				el("div", "smp-hint", {
-					text: "Add the folder where you keep your music. The player only finds tracks inside folders you add here.",
+					text: "Add the folder where you keep your music. The player finds tracks in the folders you add here, and playlist files (M3U, M3U8, PLS) in those folders show up under Playlists.",
 				})
 			);
 
@@ -7319,6 +7488,9 @@
 						return UI.refreshLibraryFromServer();
 					})
 					.then(function () {
+						return UI.reloadPlaylists();
+					})
+					.then(function () {
 						UI.applyScanProgress({
 							done: true,
 							totalFiles: App.scanProgress && App.scanProgress.found,
@@ -7342,6 +7514,9 @@
 				}, false, true)
 					.then(function () {
 						return UI.refreshLibraryFromServer();
+					})
+					.then(function () {
+						return UI.reloadPlaylists();
 					})
 					.then(function () {
 						UI.applyScanProgress({

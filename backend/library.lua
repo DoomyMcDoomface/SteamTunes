@@ -9,6 +9,7 @@ local id3 = require("id3")
 local flac = require("flac")
 local m4a = require("m4a")
 local procexec = require("procexec")
+local playlists = require("playlists")
 
 local library = {}
 
@@ -1071,14 +1072,17 @@ local function write_scan_script()
 		"param([string]$Root,[string]$Out,[string]$Done,[switch]$RootOnly)",
 		"$ErrorActionPreference = 'SilentlyContinue'",
 		"$exts = @{'.mp3'=$true;'.ogg'=$true;'.oga'=$true;'.m4a'=$true;'.aac'=$true;'.flac'=$true;'.wav'=$true}",
+		"$plexts = @{'.m3u'=$true;'.m3u8'=$true;'.pls'=$true}",
 		"$utf8 = New-Object System.Text.UTF8Encoding $false",
 		"[System.IO.File]::WriteAllText($Out + '.started', '1', $utf8)",
 		"$sw = New-Object System.IO.StreamWriter($Out, $false, $utf8)",
+		"$pl = New-Object System.IO.StreamWriter($Out + '.playlists', $false, $utf8)",
 		"function WriteFiles([string]$dir) {",
 		"  try {",
 		"    foreach ($p in [System.IO.Directory]::EnumerateFiles($dir)) {",
 		"      $ext = [System.IO.Path]::GetExtension($p).ToLowerInvariant()",
 		"      if ($exts.ContainsKey($ext)) { $sw.WriteLine($p) }",
+		"      elseif ($plexts.ContainsKey($ext)) { $pl.WriteLine($p) }",
 		"    }",
 		"  } catch {}",
 		"}",
@@ -1089,6 +1093,7 @@ local function write_scan_script()
 		"  } catch {}",
 		"}",
 		"if ($RootOnly) { WriteFiles $Root } else { Walk $Root }",
+		"$pl.Close()",
 		"$sw.Close()",
 		"if ($Done) { [System.IO.File]::WriteAllText($Done, '1', $utf8) }",
 		"",
@@ -1101,6 +1106,25 @@ local function file_extension(path)
 	local name = tostring(path):match("[^/\\]+$") or tostring(path)
 	local ext = name:match("%.([^%.]+)$")
 	return ext and ext:lower() or ""
+end
+
+-- Playlist files found while walking music folders. Kept off the audio
+-- list so a .m3u is never indexed as a track or used to decide pruning.
+local discoveredPlaylists = {}
+
+local function reset_discovered_playlists()
+	discoveredPlaylists = {}
+end
+
+local function note_playlist_file(path)
+	local ext = file_extension(path)
+	if ext ~= "m3u" and ext ~= "m3u8" and ext ~= "pls" then
+		return
+	end
+	local key = tostring(path):gsub("/", "\\"):lower()
+	if key ~= "" then
+		discoveredPlaylists[key] = path
+	end
 end
 
 local function scan_folder_lua(folder, results)
@@ -1120,6 +1144,8 @@ local function scan_folder_lua(folder, results)
 					if path then
 						if SUPPORTED_EXTENSIONS[file_extension(path)] then
 							results[#results + 1] = path
+						elseif file_extension(path) == "m3u" or file_extension(path) == "m3u8" or file_extension(path) == "pls" then
+							note_playlist_file(path)
 						else
 							local dirOk, isDir = pcall(fs.is_directory, path)
 							if (not dirOk) or isDir then
@@ -1653,8 +1679,11 @@ local function lua_walk_batch(results, maxDirs)
 				for _, entry in ipairs(entries) do
 					local path = entry_path(dir, entry)
 					if path then
-						if SUPPORTED_EXTENSIONS[file_extension(path)] then
+						local ext = file_extension(path)
+						if SUPPORTED_EXTENSIONS[ext] then
 							results[#results + 1] = path
+						elseif ext == "m3u" or ext == "m3u8" or ext == "pls" then
+							note_playlist_file(path)
 						else
 							local dirOk, isDir = pcall(fs.is_directory, path)
 							if (not dirOk) or isDir then
@@ -1708,6 +1737,8 @@ local function collect_root_audio(folder, results)
 		if path and SUPPORTED_EXTENSIONS[file_extension(path)] then
 			results[#results + 1] = path
 			n = n + 1
+		elseif path then
+			note_playlist_file(path)
 		end
 	end
 	write_scan_debug("root list folder=" .. tostring(folder) .. " audio=" .. tostring(n) .. " entries=" .. tostring(#entries))
@@ -1785,6 +1816,35 @@ local function queue_unknown_paths(paths)
 	return added
 end
 
+local function absorb_playlist_sidecar(outPath)
+	if not outPath or outPath == "" then
+		return
+	end
+	local found = {}
+	read_path_list_file(outPath .. ".playlists", found)
+	for _, path in ipairs(found) do
+		note_playlist_file(path)
+	end
+end
+
+local function sync_discovered_playlists()
+	local lookup = {}
+	for path, track in pairs(state.tracksByPath) do
+		lookup[path_key(path)] = track.id
+	end
+	local files = {}
+	for _, path in pairs(discoveredPlaylists) do
+		files[#files + 1] = path
+	end
+	local changed = playlists.sync_files(files, state.folders, function(key)
+		return lookup[key]
+	end)
+	if changed > 0 then
+		logger:info("[SteamMusicPlayer] folder playlists updated: " .. tostring(changed))
+	end
+	return changed or 0
+end
+
 local function finish_queue_from_paths(filePaths, forceAll, newOnly)
 	scanState.active = true
 	scanState.pending = {}
@@ -1811,6 +1871,7 @@ local function finish_queue_from_paths(filePaths, forceAll, newOnly)
 			pruned = 0,
 			newOnly = false,
 			added = scanState.addedThisScan or 0,
+			playlistsUpdated = sync_discovered_playlists(),
 		}
 	end
 
@@ -1876,6 +1937,11 @@ local function finish_queue_from_paths(filePaths, forceAll, newOnly)
 			.. tostring(#scanState.pending)
 	)
 
+	local playlistsUpdated = 0
+	if not scanState.active then
+		playlistsUpdated = sync_discovered_playlists()
+	end
+
 	return {
 		listing = false,
 		totalFiles = scanState.totalFiles,
@@ -1883,6 +1949,7 @@ local function finish_queue_from_paths(filePaths, forceAll, newOnly)
 		pruned = pruned,
 		newOnly = newOnly,
 		added = scanState.addedThisScan or 0,
+		playlistsUpdated = playlistsUpdated,
 	}
 end
 
@@ -1895,6 +1962,7 @@ local function begin_folder_list()
 		if not listJob.newOnly then
 			procexec.delete_file(outPath)
 		end
+		procexec.delete_file(outPath .. ".playlists")
 		listJob.currentFolder = folder
 		listJob.outPath = outPath
 		listJob.folderStartedAt = os.time()
@@ -2046,6 +2114,7 @@ local function poll_list_job()
 	lua_walk_batch(listJob.results, WALK_DIRS_PER_BATCH)
 	if listJob.outPath then
 		read_scan_result_file(listJob.currentFolder, listJob.results, listJob.outPath)
+		absorb_playlist_sidecar(listJob.outPath)
 	end
 	queue_unknown_paths(listJob.results)
 	if procexec.job_exists(listJob.jobPath) then
@@ -2064,6 +2133,7 @@ local function poll_list_job()
 	end
 	if listJob.outPath then
 		read_scan_result_file(listJob.currentFolder, listJob.results, listJob.outPath)
+		absorb_playlist_sidecar(listJob.outPath)
 	end
 	procexec.delete_file(scan_done_path())
 	if listJob.outPath then
@@ -2116,6 +2186,8 @@ function library.rescan_start(forceAll, newOnly)
 		end
 		return finished or listing_status()
 	end
+
+	reset_discovered_playlists()
 
 	-- Full Rescan and Scan For New Tracks need the complete enumerator.
 	-- Background sync unions Lua + the last good listing so it does not
@@ -2233,6 +2305,7 @@ function library.scan_batch(batchSize)
 			totalFiles = 0,
 			totalTracks = totalTracks,
 			added = scanState.addedThisScan or 0,
+			playlistsUpdated = sync_discovered_playlists(),
 		}
 	end
 
@@ -2333,6 +2406,11 @@ function library.scan_batch(batchSize)
 		totalTracks = totalTracks + 1
 	end
 
+	local playlistsUpdated = 0
+	if done then
+		playlistsUpdated = sync_discovered_playlists()
+	end
+
 	return {
 		listing = listing,
 		done = done,
@@ -2341,6 +2419,7 @@ function library.scan_batch(batchSize)
 		totalFiles = scanState.totalFiles or (listJob.results and #listJob.results) or 0,
 		totalTracks = totalTracks,
 		pendingCount = remaining,
+		playlistsUpdated = playlistsUpdated,
 		added = scanState.addedThisScan or 0,
 		lastPath = lastPath, -- TEMPORARY: crash-diagnosis aid, see main.lua
 	}

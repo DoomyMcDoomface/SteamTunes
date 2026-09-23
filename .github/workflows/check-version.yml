@@ -1,0 +1,16 @@
+name: Check plugin version
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: plugin.json, About, and CHANGELOG agree
+        run: node scripts/release-info.js --check
