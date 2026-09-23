@@ -1896,8 +1896,8 @@
 				return;
 			}
 			App.engine = new window.SteamMusicAudioEngine();
-			App.engine.gaplessEnabled = settingFlag(App.settings.gaplessEnabled, false);
-			App.engine.crossfadeSeconds = App.engine.gaplessEnabled ? asSettingNumber(App.settings.crossfadeSeconds, 4) : 0;
+			App.engine.gaplessEnabled = settingFlag(App.settings.gaplessEnabled, true);
+			App.engine.crossfadeSeconds = App.engine.gaplessEnabled ? asSettingNumber(App.settings.crossfadeSeconds, 2) : 0;
 			App.engine.outputDeviceId = App.settings.audioOutputDeviceId || "";
 			App.engine.setVolume(usableVolume(App.playerState.volume));
 			if (App.engine.setShuffle) {
@@ -4212,7 +4212,7 @@
 			UI.applyAppearanceSettings();
 			if (App.engine) {
 				var engine = App.engine;
-				engine.gaplessEnabled = settingFlag(App.settings.gaplessEnabled, false);
+				engine.gaplessEnabled = settingFlag(App.settings.gaplessEnabled, true);
 				engine.crossfadeSeconds = engine.gaplessEnabled
 					? asSettingNumber(App.settings.crossfadeSeconds, engine.crossfadeSeconds)
 					: 0;
@@ -8160,7 +8160,7 @@
 							min: 0,
 							max: 12,
 							step: 1,
-							fallback: 4,
+							fallback: 2,
 							format: function (v) {
 								return v === 0 ? "Off - instant switch" : v + "s overlap";
 							},
@@ -8257,12 +8257,12 @@
 							min: -31,
 							max: -10,
 							step: 1,
-							fallback: -18,
+							fallback: -20,
 							format: function (v) {
 								var feel = v <= -24 ? "sits under the game" : v <= -18 ? "balanced" : "leads the mix";
 								return v + " LUFS · " + feel;
 							},
-							hint: "-18 is a comfortable level that still evens the library out. -24 is where whole console game mixes sit, so pick that to have the music sink into the game rather than lead it.",
+							hint: "-20 is the starting level and still evens the library out. -24 is where whole console game mixes sit, so pick that to have the music sink into the game rather than lead it.",
 						})
 					);
 				}
@@ -8278,7 +8278,7 @@
 							min: 0,
 							max: 1,
 							step: 0.05,
-							fallback: 1,
+							fallback: 0.8,
 							format: function (v) {
 								return Math.round(v * 100) + "%";
 							},
@@ -8309,7 +8309,7 @@
 		},
 
 		renderEqualizerSettings: function (section) {
-			var eqOn = settingFlag(App.settings.eqEnabled, false);
+			var eqOn = settingFlag(App.settings.eqEnabled, true);
 			section.appendChild(
 				UI.settingsToggleRow(
 					"eqEnabled",

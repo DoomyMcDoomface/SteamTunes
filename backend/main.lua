@@ -88,7 +88,7 @@ local function sync_bootstrap_to_theme_host()
 		utils.write_file(fs.join(destDir, "bootstrap.js"), content)
 		-- Same bytes under a new name so a cached bootstrap.js cannot keep
 		-- loading the old player that searched on every keystroke.
-		utils.write_file(fs.join(destDir, "bootstrap-20260922-steam-blue.js"), content)
+		utils.write_file(fs.join(destDir, "bootstrap-20260922-default-mix.js"), content)
 		logger:info("[SteamMusicPlayer] synced bootstrap into " .. destDir)
 	end)
 	if not ok then
@@ -117,7 +117,7 @@ local injectionState = {
 -- cached copy is fine, and it loads the assets that do change (plus the
 -- stylesheet) from steamloopback.host, which always serves them fresh.
 local function register_injections(caller)
-	local bootstrapId = millennium.add_browser_js(INJECT_SUBDIR .. "/bootstrap-20260922-steam-blue.js", ".*")
+	local bootstrapId = millennium.add_browser_js(INJECT_SUBDIR .. "/bootstrap-20260922-default-mix.js", ".*")
 	injectionState.bootstrapId = bootstrapId
 	injectionState.registered = true
 

@@ -16,12 +16,12 @@ local DEFAULTS = {
 	-- still keeps volume and repeat.
 	startupBehavior = "paused", -- resume | paused | fresh
 	audioOutputDeviceId = "", -- empty string follows the Windows default
-	gaplessEnabled = false,
+	gaplessEnabled = true,
 	-- Seconds of overlap between the outgoing and incoming track when
 	-- gaplessEnabled is on. 0 means an instant, non-overlapping switch
 	-- (true "gapless" with no crossfade); anything higher fades one out
 	-- while fading the next in, like a DJ mix.
-	crossfadeSeconds = 4,
+	crossfadeSeconds = 2,
 	discordRpcEnabled = false,
 	discordClientId = "",
 
@@ -34,9 +34,9 @@ local DEFAULTS = {
 	-- Not ASWG-R001's -24 LKFS: that describes a whole game mix, and applying it
 	-- to music alone leaves the player far too quiet with no game running. See
 	-- DEFAULT_TARGET_LUFS in audio-engine.js.
-	targetLufs = -18,
+	targetLufs = -20,
 	gameDuckingEnabled = true,
-	duckStrength = 1.0, -- scales the profile's depth, 0..1
+	duckStrength = 0.8, -- scales the profile's depth, 0..1
 	dynamicsProfile = "headphones", -- headphones | speakers | night
 	-- Pull the stereo image in as the game gets loud so SFX keep the edges.
 	gameImageNarrowEnabled = true,
@@ -47,7 +47,7 @@ local DEFAULTS = {
 
 	-- Ten-band graphic EQ. Presets are translated to gains in the frontend;
 	-- the individual values are only used by the Custom preset.
-	eqEnabled = false,
+	eqEnabled = true,
 	eqPreset = "flat", -- flat | game | soft | punch | bass | treble | vocal | rock | custom
 	eq32 = 0,
 	eq64 = 0,

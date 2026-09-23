@@ -37,7 +37,7 @@
 	var BASES = ["https://steamloopback.host/steam-music-player/", "/steam-music-player/"];
 	// Bump this whenever steam-music-player.js/css/audio-engine.js change so
 	// CEF cannot keep serving a stale steamui copy after a plugin update.
-	var ASSET_REV = "20260922-steam-blue-default";
+	var ASSET_REV = "20260922-default-mix";
 
 	function head() {
 		return document.head || document.documentElement;

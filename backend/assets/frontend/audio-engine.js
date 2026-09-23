@@ -615,12 +615,11 @@
 	 * broken - and since normalization only ever attenuates, the music could no
 	 * longer be made as loud as it was before, at any slider position.
 	 *
-	 * -18 LUFS is the compromise, and it is the right one because ducking makes
-	 * the static target less important: the game-relative level is handled
-	 * dynamically, so normalization only has to fix the track-to-track
-	 * inconsistency at a level that is comfortable on its own. Users who do want
-	 * the music sitting inside the game mix can still set -24. */
-	var DEFAULT_TARGET_LUFS = -18;
+	 * -20 LUFS is the first-install target. Ducking still handles the
+	 * game-relative level, so normalization only has to even out
+	 * track-to-track level at something comfortable on its own. -24 remains
+	 * available when the music should sit inside the game mix. */
+	var DEFAULT_TARGET_LUFS = -20;
 	var TRUE_PEAK_CEILING_DB = -1;
 
 	// Normalization is a gain change, not a rescue mission. A very quiet track
@@ -951,11 +950,11 @@
 		this.playSeq = 0;
 		this.wantPlaying = false;
 		this.loadPending = false;
-		this.gaplessEnabled = false;
+		this.gaplessEnabled = true;
 		// Seconds of overlap between outgoing/incoming tracks. 0 = instant
 		// switch (still gapless, just no fade); only takes effect while
 		// gaplessEnabled is also true (see UI.applySettingsToEngine).
-		this.crossfadeSeconds = 0;
+		this.crossfadeSeconds = 2;
 		// True for the remainder of the current track once a crossfade to
 		// the next one has been kicked off, so the periodic check below
 		// only ever fires it once per track.
@@ -985,14 +984,14 @@
 		this.normalizeEnabled = true;
 		this.targetLufs = DEFAULT_TARGET_LUFS;
 		this.duckEnabled = true;
-		this.duckStrength = 1;
+		this.duckStrength = 0.8;
 		this.dynamicsProfile = "headphones";
 		this.diegeticMode = "off";
 		this.reverbAmount = 0.25;
 		this.gameImageNarrowEnabled = true;
 		this.bassMonoEnabled = true;
 		this.appliedWidthK = 0;
-		this.eqEnabled = false;
+		this.eqEnabled = true;
 		this.eqPreset = "flat";
 		this.eqGains = EQ_PRESETS.flat.slice();
 		this.outputDeviceId = "";
